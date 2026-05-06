@@ -7,6 +7,8 @@ use utoipa_swagger_ui::SwaggerUi;
 use crate::handler::health;
 use crate::openapi::ApiDoc;
 
+// axumのRouterはビルダーパターン: メソッドチェーンで構築する。
+// `merge` で別のRouter（ここではSwaggerUi）を統合、`layer` でmiddlewareを追加。
 pub fn build_router() -> Router {
     Router::new()
         .route("/healthz", get(health::healthz))

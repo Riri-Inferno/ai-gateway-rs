@@ -1,5 +1,6 @@
 use thiserror::Error;
 
+// `#[derive(Error)]` で `std::error::Error` 実装を自動生成（thiserrorクレートのマクロ）
 #[derive(Debug, Error)]
 pub enum DomainError {
     #[error("provider not found: {0}")]

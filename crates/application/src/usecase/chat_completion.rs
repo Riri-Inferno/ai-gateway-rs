@@ -7,6 +7,8 @@ use domain::DomainError;
 
 use crate::port::AiProvider;
 
+// `Arc<dyn AiProvider>`: 「AiProvider trait を実装した何か」を動的ディスパッチで保持。
+// Arcは複数スレッドから共有するためのスマートポインタ（参照カウント方式）。
 pub struct ChatCompletionUseCase {
     providers: HashMap<ProviderId, Arc<dyn AiProvider>>,
 }

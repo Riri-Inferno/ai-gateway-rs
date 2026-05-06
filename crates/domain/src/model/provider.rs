@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+// derive: 値型として複製可・HashMapのキーに使える・JSONと相互変換
+// `rename_all = "snake_case"` で JSON上は "google_ai_studio" 等になる
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ProviderId {

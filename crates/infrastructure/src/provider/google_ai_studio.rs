@@ -4,6 +4,7 @@ use domain::model::completion::{ChatCompletionRequest, ChatCompletionResponse};
 use domain::model::provider::ProviderId;
 use domain::DomainError;
 
+// 先頭の `_` は「未使用警告を抑える」プレフィックス。実装時に `_` を外す。
 pub struct GoogleAiStudioClient {
     _api_key: String,
     _http: reqwest::Client,

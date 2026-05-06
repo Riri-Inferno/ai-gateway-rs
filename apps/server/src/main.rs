@@ -3,6 +3,8 @@ use infrastructure::config::AppConfig;
 use presentation::build_router;
 use tracing_subscriber::EnvFilter;
 
+// `#[tokio::main]`: 通常 Rust の `fn main()` は同期だが、この属性で
+// tokio非同期ランタイムを起動した上で `async fn main` を実行できる。
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let _ = dotenvy::dotenv();
@@ -27,6 +29,8 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
+// k3sのrolling update時、Podには SIGTERM が送られる。これを捕捉して
+// 進行中リクエストを終わらせてから停止するのが「graceful shutdown」。
 async fn shutdown_signal() {
     let ctrl_c = async {
         tokio::signal::ctrl_c()

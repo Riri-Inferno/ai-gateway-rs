@@ -2,6 +2,8 @@ use utoipa::OpenApi;
 
 use crate::handler::health;
 
+// `#[derive(OpenApi)]` + `#[openapi(paths(...), components(schemas(...)))]` で
+// 全ハンドラのOpenAPI仕様を集約。`ApiDoc::openapi()` で生成済みJSONを取り出せる
 #[derive(OpenApi)]
 #[openapi(
     info(
