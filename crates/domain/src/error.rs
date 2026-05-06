@@ -8,4 +8,7 @@ pub enum DomainError {
 
     #[error("invalid request: {0}")]
     InvalidRequest(String),
+
+    #[error("provider error: {0}")]
+    ProviderError(String),
 }

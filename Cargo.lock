@@ -231,6 +231,7 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "thiserror",
+ "utoipa",
 ]
 
 [[package]]
@@ -1159,6 +1160,7 @@ dependencies = [
  "anyhow",
  "application",
  "axum",
+ "domain",
  "dotenvy",
  "infrastructure",
  "presentation",

@@ -9,3 +9,6 @@ publish.workspace = true
 [dependencies]
 thiserror.workspace = true
 serde.workspace = true
+# 純DDDだとdomainはutoipaに依存させない方が綺麗だが、
+# OpenAPIスキーマ自動生成のため pragmatic に許容する。
+utoipa.workspace = true

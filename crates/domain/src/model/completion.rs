@@ -1,14 +1,15 @@
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 use super::provider::ProviderId;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct ChatMessage {
     pub role: Role,
     pub content: String,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum Role {
     System,
@@ -16,7 +17,7 @@ pub enum Role {
     Assistant,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct ChatCompletionRequest {
     pub provider: ProviderId,
     pub model: String,
@@ -25,7 +26,7 @@ pub struct ChatCompletionRequest {
     pub max_tokens: Option<u32>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct ChatCompletionResponse {
     pub provider: ProviderId,
     pub model: String,
@@ -33,7 +34,7 @@ pub struct ChatCompletionResponse {
     pub usage: Option<Usage>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct Usage {
     pub prompt_tokens: u32,
     pub completion_tokens: u32,
