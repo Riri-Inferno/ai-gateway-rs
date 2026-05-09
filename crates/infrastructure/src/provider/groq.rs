@@ -52,7 +52,11 @@ impl AiProvider for GroqClient {
                 Role::Assistant => messages.push(GroqMessage {
                     role: "assistant".into(),
                     content: msg.content.clone(),
-                })
+                }),
+                Role::Tool  => messages.push(GroqMessage {
+                    role: "tool".into(),
+                    content: msg.content.clone()
+                }),
             }
         }
 

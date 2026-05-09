@@ -58,6 +58,11 @@ impl AiProvider for GoogleAiStudioClient {
                         text: msg.content.clone(),
                     }],
                 }),
+                Role::Tool  => {
+                    return Err(DomainError::InvalidRequest(
+                        "this role is not supported yet".into()
+                    ));
+                }
             }
         }
 
