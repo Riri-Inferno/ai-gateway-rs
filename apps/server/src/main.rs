@@ -5,7 +5,7 @@ use anyhow::Context;
 use application::port::AiProvider;
 use application::usecase::chat_completion::ChatCompletionUseCase;
 use domain::model::provider::ProviderId;
-use infrastructure::config::AppConfig;
+use infrastructure::{config::AppConfig, provider::openrouter::OpenRouterClient};
 use infrastructure::provider::google_ai_studio::GoogleAiStudioClient;
 use infrastructure::provider::groq::GroqClient;
 use presentation::{build_router, AppState};
@@ -46,6 +46,17 @@ async fn main() -> anyhow::Result<()> {
         tracing::info!("registered provider: groq");
     } else {
         tracing::warn!("GROQ_API_KEY not set; provider unavailable");
+    }
+
+    // OpenRouter
+    if let Some(key) = config.openrouter_api_key.clone() {
+        providers.insert(
+            ProviderId::OpenRouter,
+            Arc::new(OpenRouterClient::new(key)),
+        );
+        tracing::info!("registered provider: openrouter");
+    } else {
+        tracing::warn!("OPENROUTER_API_KEY not set; provider unavailable");
     }
 
     let state = AppState {
