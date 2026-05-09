@@ -69,7 +69,6 @@ impl AiProvider for OpenRouterClient {
             messages,
             temperature: req.temperature,
             max_tokens: req.max_tokens,
-            ..Default::default()
         };
 
         // リクエストを飛ばす
@@ -97,20 +96,19 @@ impl AiProvider for OpenRouterClient {
             .await
             .map_err(|e| DomainError::ProviderError(format!("decode failed: {e}")))?;
 
-        // パース済レスポンスからchoiceを所有権ごと取り出す
+        // パース済レスポンスからcontentを取り出す。choices無し or content無しでエラー
         let content = parsed
             .choices
             .into_iter()
             .next()
-            .map(|c| c.message.content)
-            .ok_or_else(|| DomainError::ProviderError("empty choices".into()))?;
+            .and_then(|c| c.message.content)
+            .ok_or_else(|| DomainError::ProviderError("empty content".into()))?;
 
         // レスポンスを組み立てて返す
-        // Usageはないパラメータは無視
         Ok(ChatCompletionResponse {
             provider: ProviderId::OpenRouter,
             model: req.model.clone(),
-            content: content.unwrap_or_default(),
+            content,
             usage: parsed.usage.map(|u| Usage {
                 prompt_tokens: u.prompt_tokens,
                 completion_tokens: u.completion_tokens,
@@ -128,35 +126,12 @@ impl AiProvider for OpenRouterClient {
 pub struct OpenRouterRequest {
     pub model: String, // 未指定ならデフォルト
     pub messages: Vec<OpenRouterMessage>,
-    
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub prompt: Option<String>,
 
     // 生成制御パラメータ
     #[serde(skip_serializing_if = "Option::is_none")]
     pub temperature: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_tokens: Option<u32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub top_p: Option<f32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub top_k: Option<u32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub stream: Option<bool>,
-
-    // 構造化出力
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub response_format: Option<ResponseFormat>,
-
-    // OpenRouter 独自・詳細設定
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub transforms: Option<Vec<String>>, // "plugins" の一部
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub models: Option<Vec<String>>,      // フォールバック用
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub route: Option<String>,           // "fallback"
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub user: Option<String>,            // 悪用検知用ID
 }
 
 #[derive(Serialize, Deserialize)]
@@ -167,51 +142,18 @@ pub struct OpenRouterMessage {
     pub name: Option<String>,
 }
 
-#[derive(Serialize, Deserialize)]
-#[serde(tag = "type")]
-pub enum OpenRouterContentPart {
-    #[serde(rename = "text")]
-    Text { text: String },
-    #[serde(rename = "image_url")]
-    Image { image_url: OpenRouterImageUrl },
-}
-
-// TODO:後で拡張するかも
-#[derive(Serialize, Deserialize)]
-pub struct OpenRouterImageUrl {
-    pub url: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub detail: Option<String>, // "auto", "low", "high"
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(tag = "type")]
-pub enum ResponseFormat {
-    #[serde(rename = "json_object")]
-    JsonObject,
-    #[serde(rename = "json_schema")]
-    JsonSchema { json_schema: JsonSchemaDef },
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct JsonSchemaDef {
-    pub name: String,
-    pub strict: Option<bool>,
-    pub schema: serde_json::Value,
-}
-
 // ===== Response types =====
 
 #[derive(Deserialize)]
 pub struct OpenRouterResponse {
     pub id: String,
-    pub choices: Vec<Choice>,
-    pub usage: Option<Usage>,
+    pub choices: Vec<OpenRouterChoice>,
+    pub usage: Option<OpenRouterUsage>,
     pub model: String,
 }
 
 #[derive(Deserialize)]
-pub struct Choice {
+pub struct OpenRouterChoice {
     pub message: OpenRouterResponseMessage,
     pub finish_reason: Option<String>,
 }
