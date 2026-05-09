@@ -74,7 +74,7 @@ async fn main() -> anyhow::Result<()> {
         .await
         .with_context(|| format!("failed to bind {}", config.bind))?;
 
-    tracing::info!(addr = %config.bind, "ai-gatewey-rs listening");
+    tracing::info!(addr = %config.bind, "ai-gateway-rs listening");
     axum::serve(listener, app)
         .with_graceful_shutdown(shutdown_signal())
         .await?;

@@ -12,7 +12,7 @@ use crate::handler::{chat, health};
 #[derive(OpenApi)]
 #[openapi(
     info(
-        title = "ai-gatewey-rs",
+        title = "ai-gateway-rs",
         version = "0.1.0",
         description = "AI Gateway for relaying multiple AI APIs (homelab use)"
     ),

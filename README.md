@@ -1,4 +1,4 @@
-# ai-gatewey-rs
+# ai-gateway-rs
 
 Rustで書かれた、AI APIを呼ぶだけの内部向け基盤（AI Gateway）。
 
@@ -48,7 +48,7 @@ DBは使わない（利用ログ・メトリクスはk3s側のLoki/Grafanaで集
 Cargoワークスペースで層ごとにcrateを切る。依存方向は `presentation → application → domain ← infrastructure`。
 
 ```
-ai-gatewey-rs/
+ai-gateway-rs/
 ├── Cargo.toml                # workspace
 ├── crates/
 │   ├── domain/               # Entity / Value Object / Repository trait（依存ゼロ）
