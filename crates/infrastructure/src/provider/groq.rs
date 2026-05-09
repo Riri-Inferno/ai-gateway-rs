@@ -35,13 +35,7 @@ impl AiProvider for GroqClient {
         &self,
         req: &ChatCompletionRequest,
     ) -> Result<ChatCompletionResponse, DomainError> {
-        // ヒント（google_ai_studio.rs の対応箇所と見比べてみてください）:
-        //
-        // ① domain::ChatCompletionRequest を GroqRequest に詰め替える
-        //    - messages: Role(System/User/Assistant) → "system"/"user"/"assistant" 文字列
-        //    - model / temperature / max_tokens はそのまま渡す
-
-        // メッセージインスタンスを宣言        
+        // メッセージインスタンスを宣言
         let mut messages: Vec<GroqMessage> = Vec::new();
 
         // リクエストに含まれるるロールを元にメッセージを作る
@@ -70,14 +64,6 @@ impl AiProvider for GroqClient {
             max_tokens: req.max_tokens,
         };
 
-        // ② HTTPリクエスト送信
-        //    self.http.post(ENDPOINT)
-        //        .bearer_auth(&self.api_key)   // ← Gemini はクエリ?key= だったがGroqはBearer
-        //        .json(&body)
-        //        .send()
-        //        .await
-        //        .map_err(|e| DomainError::ProviderError(format!("request failed: {e}")))?;
-        
         // リクエストを飛ばす
         let resp = self
             .http
@@ -88,9 +74,6 @@ impl AiProvider for GroqClient {
             .await
             .map_err(|e| DomainError::ProviderError(format!("request failed: {e}")))?;
 
-        // ③ resp.status().is_success() でなければ status と body をログに出して
-        //    DomainError::ProviderError(...) で早期return
-        
         // GroqAPI呼び出しが成功じゃないときはエラーを返して終了
         if !resp.status().is_success() {
             let status = resp.status();
@@ -99,10 +82,6 @@ impl AiProvider for GroqClient {
                 "groq call status={status} body={text}"
             )));
         }
-
-        // ④ resp.json::<GroqResponse>().await? で型付けデコード
-        //    → choices[0].message.content を取り出す
-        //    → ChatCompletionResponse { provider: ProviderId::Groq, model, content, usage } を返す
 
         // APIからのレスポンスをデコード
         let parsed: GroqResponse = resp
