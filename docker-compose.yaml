@@ -18,12 +18,6 @@ services:
     environment:
       - RUST_LOG=debug
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "/app/server", "--version"]
-      interval: 1m30s
-      timeout: 30s
-      retries: 5
-      start_period: 30s
 
   # --- テスト実行用サービス ---
   # docker compose run --rm testでテストを実行できます
