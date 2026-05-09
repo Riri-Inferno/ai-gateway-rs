@@ -7,6 +7,7 @@ use application::usecase::chat_completion::ChatCompletionUseCase;
 use domain::model::provider::ProviderId;
 use infrastructure::config::AppConfig;
 use infrastructure::provider::google_ai_studio::GoogleAiStudioClient;
+use infrastructure::provider::groq::GroqClient;
 use presentation::{build_router, AppState};
 use tracing_subscriber::EnvFilter;
 
@@ -36,6 +37,17 @@ async fn main() -> anyhow::Result<()> {
         tracing::warn!("GOOGLE_AI_STUDIO_API_KEY not set; provider unavailable");
     }
 
+    // Groq
+    if let Some(key) = config.groq_api_key.clone() {
+        providers.insert(
+            ProviderId::Groq,
+            Arc::new(GroqClient::new(key)),
+        );
+        tracing::info!("registered provider: groq");
+    } else {
+        tracing::warn!("GROQ_API_KEY not set; provider unavailable");
+    }
+
     let state = AppState {
         chat: Arc::new(ChatCompletionUseCase::new(providers)),
         allowed_api_keys: Arc::new(config.gateway_api_keys.clone()),
@@ -60,7 +72,8 @@ async fn main() -> anyhow::Result<()> {
 }
 
 // k3sのrolling update時、Podには SIGTERM が送られる。これを捕捉して
-// 進行中リクエストを終わらせてから停止するのが「graceful shutdown」。
+// 進行中リクエストを終わらせてから停止する
+// graceful shutdown
 async fn shutdown_signal() {
     let ctrl_c = async {
         tokio::signal::ctrl_c()
