@@ -10,6 +10,9 @@ COPY . .
 RUN cargo chef prepare --recipe-path recipe.json
 
 FROM chef AS builder
+# グローバルARGをこのステージ内で使えるよう再宣言
+ARG APP_NAME
+
 # 依存関係のビルド（キャッシュ可能）
 COPY --from=planner /app/recipe.json recipe.json
 RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
