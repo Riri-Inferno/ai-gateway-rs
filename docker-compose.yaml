@@ -1,0 +1,34 @@
+services:
+  # --- 本番・実行用サービス ---
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      # Dockerfile内の AS runtimeステージまでビルド
+      target: runtime
+      args:
+        - RUST_VERSION=1.95
+        - APP_NAME=server
+    env_file:
+      - .env
+    image: ai-gateway-rs:latest
+    ports:
+      - "8080:8080"
+    environment:
+      - RUST_LOG=debug
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "/app/server", "--version"]
+      interval: 1m30s
+      timeout: 30s
+      retries: 5
+      start_period: 30s
+
+  # --- テスト実行用サービス ---
+  # docker compose run --rm testでテストを実行できます
+  test:
+    build:
+      target: test
+    command: cargo test --workspace
+    environment:
+      - RUST_BACKTRACE=1

@@ -31,9 +31,6 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
 # ===================================
 FROM chef AS test
 COPY . .
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/usr/local/cargo/git \
-    cargo test
 
 # ===================================
 # 実行ステージ（本番）
