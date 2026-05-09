@@ -17,13 +17,13 @@ Rustで書かれた、AI APIを呼ぶだけの内部向け基盤（AI Gateway）
 - 上流APIの破壊的変更があっても、ラッパー層をここで吸収すれば各サービス側は無傷
 - k3sに乗せる予定
 
-## 対応プロバイダ（予定）
+## 対応プロバイダ
 
 いずれもAPIキー1本で叩けるREST APIから着手。
 
-- [ ] Google AI Studio (Gemini API) ← まずはこれ
-- [ ] Groq
-- [ ] OpenRouter
+- [x] Google AI Studio (Gemini API)
+- [x] Groq
+- [x] OpenRouter
 - [ ] (将来) Vertex AI など ADC 認証系
 
 ## 技術スタック
@@ -68,20 +68,20 @@ ai-gateway-rs/
 ## 認証
 
 - **インターネット非公開**。k3sクラスタ内のサービスPodからのみ叩かれる前提。
-- ゲートウェイへの認証は **APIキー方式（暫定）**。`X-API-Key: <key>` ヘッダで判定するmiddlewareを置く想定。
+- ゲートウェイへの認証は **APIキー方式**。`X-API-Key: <key>` ヘッダで判定するmiddlewareが動作中。
 - 各上流プロバイダのAPIキーはこのゲートウェイの環境変数（k3s Secret）でのみ保持。
 
 > TODO: 単一鍵 / サービス別鍵 / ローテーション運用 を決める
 
-## エンドポイント（予定）
+## エンドポイント
 
-| Method | Path | 用途 |
-|---|---|---|
-| POST | `/v1/chat/completions` | 統一インターフェースで chat 推論 |
-| GET  | `/v1/providers` | 利用可能プロバイダ一覧 |
-| GET  | `/healthz` | liveness |
-| GET  | `/readyz` | readiness |
-| GET  | `/swagger-ui` | OpenAPI ドキュメント |
+| Method | Path | 用途 | 状態 |
+|---|---|---|:-:|
+| POST | `/v1/chat/completions` | 統一インターフェースで chat 推論 | ✅ |
+| GET  | `/v1/providers` | 利用可能プロバイダ一覧 | 未実装 |
+| GET  | `/healthz` | liveness | ✅ |
+| GET  | `/readyz` | readiness | ✅ |
+| GET  | `/swagger-ui` | OpenAPI ドキュメント | ✅ |
 
 ## セットアップ（開発）
 
@@ -111,13 +111,11 @@ docker compose up --build
 | `OPENROUTER_API_KEY` | OpenRouter のキー（後で） |
 | `RUST_LOG` | ログレベル（例: `info,ai_gateway=debug`） |
 
+## ドキュメント
+
+- [CI/CD と ブランチ運用](docs/ci-cd.md) — GitHub Actions / GHCR / リリースフロー
+
 ## TODO
 
-- [ ] Cargoワークスペースの雛形を作る
-- [ ] axum + utoipa の最小ハンドラ（`/healthz`, `/swagger-ui`）
-- [ ] `AiProvider` trait の最低限定義
-- [ ] Google AI Studio クライアント実装
-- [ ] APIキー認証middleware
-- [ ] tracingのJSONログ整形（Loki向け）
-- [ ] Dockerfile（multi-stage build）
 - [ ] k3s manifest（Deployment / Service / Secret）
+- [ ] `/v1/providers` エンドポイント（利用可能プロバイダ一覧）
