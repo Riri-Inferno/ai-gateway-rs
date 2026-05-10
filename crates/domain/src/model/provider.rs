@@ -8,6 +8,7 @@ use utoipa::ToSchema;
 pub enum ProviderId {
     GoogleAiStudio,
     Groq,
+    #[serde(rename = "openrouter")]
     OpenRouter,
     Vertex,
 }
