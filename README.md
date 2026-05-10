@@ -77,11 +77,37 @@ ai-gateway-rs/
 
 | Method | Path | 用途 | 状態 |
 |---|---|---|:-:|
-| POST | `/v1/chat/completions` | 統一インターフェースで chat 推論 | ✅ |
+| POST | `/v1/chat/completions` | 統一インターフェースで chat 推論（テキスト/画像入力対応） | ✅ |
 | GET  | `/v1/providers` | 利用可能プロバイダ一覧 | 未実装 |
 | GET  | `/healthz` | liveness | ✅ |
 | GET  | `/readyz` | readiness | ✅ |
 | GET  | `/swagger-ui` | OpenAPI ドキュメント | ✅ |
+
+### 画像入力（マルチモーダル）
+
+`messages[].content` は **文字列または配列** を受け付ける（OpenAI互換）。
+
+```json
+{
+  "provider": "groq",
+  "model": "meta-llama/llama-4-scout-17b-16e-instruct",
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        { "type": "text", "text": "このレシートをJSONに" },
+        { "type": "image_url", "image_url": { "url": "data:image/jpeg;base64,/9j/4AAQ..." } }
+      ]
+    }
+  ]
+}
+```
+
+注意点:
+
+- **モデル能力チェックは呼び出し側責任**（テキスト専用モデルに画像を投げると上流が400を返す、それをそのまま中継）
+- **Google AI Studio (Gemini) は `data:` URL のみ対応**（http(s) URLを送ると `InvalidRequest` で400）
+- リクエストbodyの上限は **16MB**（数MB級の画像を想定）
 
 ## セットアップ（開発）
 

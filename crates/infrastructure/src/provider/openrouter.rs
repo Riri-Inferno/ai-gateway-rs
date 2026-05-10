@@ -3,7 +3,9 @@
 
 use application::port::AiProvider;
 use async_trait::async_trait;
-use domain::model::completion::{ChatCompletionRequest, ChatCompletionResponse, Role, Usage};
+use domain::model::completion::{
+    ChatCompletionRequest, ChatCompletionResponse, ContentPart, MessageContent, Role, Usage,
+};
 use domain::model::provider::ProviderId;
 use domain::DomainError;
 use serde::{Deserialize, Serialize};
@@ -39,28 +41,19 @@ impl AiProvider for OpenRouterClient {
 
         // リクエストに含まれるるロールを元にメッセージを作る
         for msg in &req.messages {
-            match msg.role {
-                Role::System => messages.push(OpenRouterMessage {
-                    role: "system".into(),
-                    content: msg.content.clone(),
-                    name: None
-                }),
-                Role::User => messages.push(OpenRouterMessage {
-                    role: "user".into(),
-                    content: msg.content.clone(),
-                    name: None
-                }),
-                Role::Assistant => messages.push(OpenRouterMessage {
-                    role: "assistant".into(),
-                    content: msg.content.clone(),
-                    name: None
-                }),
-                Role::Tool  => messages.push(OpenRouterMessage {
-                    role: "tool".into(),
-                    content: msg.content.clone(),
-                    name: None
-                }),
-            }
+            let content = domain_content_to_openrouter(&msg.content);
+
+            let role = match msg.role {
+                Role::System => "system",
+                Role::User => "user",
+                Role::Assistant => "assistant",
+                Role::Tool => "tool",
+            };
+            messages.push(OpenRouterMessage {
+                role: role.into(),
+                content,
+                name: None
+            });
         }
 
         // クライアントつくる
@@ -118,6 +111,28 @@ impl AiProvider for OpenRouterClient {
     }
 }
 
+/// domain MessageContent → OpenRouter wire content
+/// テキスト単体なら OpenRouter::Text、partsなら OpenRouterContent::Parts に詰め替える
+fn domain_content_to_openrouter(c: &MessageContent) -> OpenRouterContent {
+    match c {
+        MessageContent::Text(s) => OpenRouterContent::Text(s.clone()),
+        MessageContent::Parts(parts) => OpenRouterContent::Parts(
+            parts
+                .iter()
+                .map(|p| match p {
+                    ContentPart::Text { text } => OpenRouterContentPart::Text { text: text.clone() },
+                    ContentPart::ImageUrl { image_url } => OpenRouterContentPart::ImageUrl {
+                        image_url: OpenRouterImageUrl {
+                            url: image_url.url.clone(),
+                            detail: image_url.detail.clone(),
+                        },
+                    },
+                })
+                .collect(),
+        ),
+    }
+}
+
 // ===== OpenRouter API wire types =====
 // roleは小文字 ("system" | "user" | "assistant")。
 // snake_case フィールド名 (max_tokens / prompt_tokens 等) はそのまま使われる。
@@ -134,12 +149,35 @@ pub struct OpenRouterRequest {
     pub max_tokens: Option<u32>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize)]
 pub struct OpenRouterMessage {
     pub role: String, // "system", "user", "assistant", "tool"
-    pub content: String,
+    pub content: OpenRouterContent,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+}
+
+// `#[serde(untagged)]`: シリアライズ時に variant に応じてJSON形が変わる。
+// Text ならただの文字列、Parts なら配列。OpenAI互換APIの仕様。
+#[derive(Serialize)]
+#[serde(untagged)]
+pub enum OpenRouterContent {
+    Text(String),
+    Parts(Vec<OpenRouterContentPart>),
+}
+
+#[derive(Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum OpenRouterContentPart {
+    Text { text: String },
+    ImageUrl { image_url: OpenRouterImageUrl },
+}
+
+#[derive(Serialize)]
+pub struct OpenRouterImageUrl {
+    pub url: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
 }
 
 // ===== Response types =====
