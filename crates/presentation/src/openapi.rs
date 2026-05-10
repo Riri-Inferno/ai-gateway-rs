@@ -1,5 +1,6 @@
 use domain::model::completion::{
-    ChatCompletionRequest, ChatCompletionResponse, ChatMessage, Role, Usage,
+    ChatCompletionRequest, ChatCompletionResponse, ChatMessage, ContentPart, ImageUrl,
+    MessageContent, Role, Usage,
 };
 use domain::model::provider::ProviderId;
 use utoipa::openapi::security::{ApiKey, ApiKeyValue, SecurityScheme};
@@ -26,6 +27,9 @@ use crate::handler::{chat, health};
         ChatCompletionRequest,
         ChatCompletionResponse,
         ChatMessage,
+        MessageContent,
+        ContentPart,
+        ImageUrl,
         Role,
         Usage,
         ProviderId,

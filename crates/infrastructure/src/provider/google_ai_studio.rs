@@ -5,7 +5,7 @@
 use application::port::AiProvider;
 use async_trait::async_trait;
 use domain::model::completion::{
-    ChatCompletionRequest, ChatCompletionResponse, Role, Usage,
+    ChatCompletionRequest, ChatCompletionResponse, ContentPart, MessageContent, Role, Usage,
 };
 use domain::model::provider::ProviderId;
 use domain::DomainError;
@@ -43,24 +43,21 @@ impl AiProvider for GoogleAiStudioClient {
 
         for msg in &req.messages {
             match msg.role {
-                Role::System => system_parts.push(GeminiPart {
-                    text: msg.content.clone(),
-                }),
+                Role::System => {
+                    // system は画像不可。テキストのみ抽出
+                    system_parts.push(GeminiPart::text(msg.content.extract_text()));
+                }
                 Role::User => contents.push(GeminiContent {
                     role: "user".into(),
-                    parts: vec![GeminiPart {
-                        text: msg.content.clone(),
-                    }],
+                    parts: domain_content_to_gemini_parts(&msg.content)?,
                 }),
                 Role::Assistant => contents.push(GeminiContent {
                     role: "model".into(),
-                    parts: vec![GeminiPart {
-                        text: msg.content.clone(),
-                    }],
+                    parts: domain_content_to_gemini_parts(&msg.content)?,
                 }),
-                Role::Tool  => {
+                Role::Tool => {
                     return Err(DomainError::InvalidRequest(
-                        "this role is not supported yet".into()
+                        "google_ai_studio: tool role is not supported yet".into(),
                     ));
                 }
             }
@@ -100,12 +97,12 @@ impl AiProvider for GoogleAiStudioClient {
             .await
             .map_err(|e| DomainError::ProviderError(format!("decode failed: {e}")))?;
 
+        // レスポンスの parts のうち最初の text を取り出す
         let content = parsed
             .candidates
             .into_iter()
             .next()
-            .and_then(|c| c.content.parts.into_iter().next())
-            .map(|p| p.text)
+            .and_then(|c| c.content.parts.into_iter().find_map(|p| p.text))
             .ok_or_else(|| DomainError::ProviderError("empty response".into()))?;
 
         Ok(ChatCompletionResponse {
@@ -121,8 +118,47 @@ impl AiProvider for GoogleAiStudioClient {
     }
 }
 
+/// domain MessageContent → Gemini の parts 配列に変換
+fn domain_content_to_gemini_parts(c: &MessageContent) -> Result<Vec<GeminiPart>, DomainError> {
+    match c {
+        MessageContent::Text(s) => Ok(vec![GeminiPart::text(s.clone())]),
+        MessageContent::Parts(parts) => parts
+            .iter()
+            .map(|p| match p {
+                ContentPart::Text { text } => Ok(GeminiPart::text(text.clone())),
+                ContentPart::ImageUrl { image_url } => {
+                    let (mime_type, data) = parse_data_url(&image_url.url)?;
+                    Ok(GeminiPart::inline_data(mime_type, data))
+                }
+            })
+            .collect(),
+    }
+}
+
+/// `data:image/jpeg;base64,XXXXX` 形式の data URL を (mime_type, base64データ) に分解
+/// http(s) URL は Gemini が直接受け付けないので未サポートとしてエラー
+fn parse_data_url(url: &str) -> Result<(String, String), DomainError> {
+    let suffix = url.strip_prefix("data:").ok_or_else(|| {
+        DomainError::InvalidRequest(
+            "google_ai_studio: only data: URLs are supported for image input".into(),
+        )
+    })?;
+
+    let (header, data) = suffix.split_once(',').ok_or_else(|| {
+        DomainError::InvalidRequest("google_ai_studio: malformed data: URL".into())
+    })?;
+
+    if !header.ends_with(";base64") {
+        return Err(DomainError::InvalidRequest(
+            "google_ai_studio: only base64-encoded data: URLs are supported".into(),
+        ));
+    }
+
+    let mime_type = header.trim_end_matches(";base64").to_string();
+    Ok((mime_type, data.to_string()))
+}
+
 // ===== Gemini API のリクエスト/レスポンス型（このファイル内専用） =====
-// 外に出さないので `pub` を付けない（モジュール内のみ可視）
 
 #[derive(Serialize)]
 struct GeminiRequest {
@@ -144,9 +180,41 @@ struct GeminiSystemInstruction {
     parts: Vec<GeminiPart>,
 }
 
-#[derive(Serialize, Deserialize)]
+// Gemini の part は text または inlineData の片方を持つ。
+// 単一struct + Option二つで両用、不要なフィールドは serde で skip する設計。
+#[derive(Serialize, Deserialize, Default)]
 struct GeminiPart {
-    text: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    text: Option<String>,
+    #[serde(
+        rename = "inlineData",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    inline_data: Option<GeminiInlineData>,
+}
+
+impl GeminiPart {
+    fn text(s: String) -> Self {
+        Self {
+            text: Some(s),
+            inline_data: None,
+        }
+    }
+
+    fn inline_data(mime_type: String, data: String) -> Self {
+        Self {
+            text: None,
+            inline_data: Some(GeminiInlineData { mime_type, data }),
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+struct GeminiInlineData {
+    #[serde(rename = "mimeType")]
+    mime_type: String,
+    data: String,
 }
 
 #[derive(Serialize)]
