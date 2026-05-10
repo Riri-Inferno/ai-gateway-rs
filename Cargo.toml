@@ -50,3 +50,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 
 # 非同期trait（async fn in trait はstableだがdyn Trait互換のため使う場面あり）
 async-trait = "0.1"
+
+# GCP認証（ADC: Application Default Credentials）
+# ローカルは `gcloud auth application-default login`、k3sは WIF JSON マウント前提
+gcp_auth = "0.12"

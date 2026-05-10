@@ -8,6 +8,7 @@ use domain::model::provider::ProviderId;
 use infrastructure::{config::AppConfig, provider::openrouter::OpenRouterClient};
 use infrastructure::provider::google_ai_studio::GoogleAiStudioClient;
 use infrastructure::provider::groq::GroqClient;
+use infrastructure::provider::vertex::VertexClient;
 use presentation::{build_router, AppState};
 use tracing_subscriber::EnvFilter;
 
@@ -57,6 +58,37 @@ async fn main() -> anyhow::Result<()> {
         tracing::info!("registered provider: openrouter");
     } else {
         tracing::warn!("OPENROUTER_API_KEY not set; provider unavailable");
+    }
+
+    // Vertex AI (GCP)
+    // ADCトークンプロバイダの初期化は非同期＆失敗しうる。
+    // VERTEX_PROJECT_ID 未設定なら登録スキップ、設定済みでADC解決失敗ならwarnログを出して続行。
+    if let Some(vertex_cfg) = config.vertex.clone() {
+        match gcp_auth::provider().await {
+            Ok(token_provider) => {
+                providers.insert(
+                    ProviderId::Vertex,
+                    Arc::new(VertexClient::new(
+                        token_provider,
+                        vertex_cfg.project_id.clone(),
+                        vertex_cfg.location.clone(),
+                    )),
+                );
+                tracing::info!(
+                    project_id = %vertex_cfg.project_id,
+                    location = %vertex_cfg.location,
+                    "registered provider: vertex"
+                );
+            }
+            Err(e) => {
+                tracing::warn!(
+                    error = %e,
+                    "vertex: ADC token provider init failed; provider unavailable"
+                );
+            }
+        }
+    } else {
+        tracing::warn!("VERTEX_PROJECT_ID not set; provider unavailable");
     }
 
     let state = AppState {
