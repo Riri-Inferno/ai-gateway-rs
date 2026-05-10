@@ -5,7 +5,7 @@ use tower_http::trace::TraceLayer;
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
-use crate::handler::{chat, health};
+use crate::handler::{chat, health, providers};
 use crate::middleware::api_key::require_api_key;
 use crate::openapi::ApiDoc;
 use crate::state::AppState;
@@ -19,6 +19,7 @@ const MAX_BODY_BYTES: usize = 16 * 1024 * 1024;
 pub fn build_router(state: AppState) -> Router {
     let v1 = Router::new()
         .route("/chat/completions", post(chat::chat_completion))
+        .route("/providers", get(providers::list_providers))
         .route_layer(axum::middleware::from_fn_with_state(
             state.clone(),
             require_api_key,
