@@ -6,7 +6,7 @@ use domain::model::provider::ProviderId;
 use utoipa::openapi::security::{ApiKey, ApiKeyValue, SecurityScheme};
 use utoipa::{Modify, OpenApi};
 
-use crate::handler::{chat, health};
+use crate::handler::{chat, health, providers};
 
 // `#[derive(OpenApi)]` + `#[openapi(paths(...), components(schemas(...)))]` で
 // 全ハンドラのOpenAPI仕様を集約。`ApiDoc::openapi()` で生成済みJSONを取り出せる
@@ -21,9 +21,11 @@ use crate::handler::{chat, health};
         health::healthz,
         health::readyz,
         chat::chat_completion,
+        providers::list_providers,
     ),
     components(schemas(
         health::HealthResponse,
+        providers::ProvidersResponse,
         ChatCompletionRequest,
         ChatCompletionResponse,
         ChatMessage,
@@ -38,6 +40,7 @@ use crate::handler::{chat, health};
     tags(
         (name = "system", description = "Liveness/Readiness probes"),
         (name = "chat", description = "Chat completion (provider-agnostic)"),
+        (name = "providers", description = "Available AI provider listing"),
     )
 )]
 pub struct ApiDoc;

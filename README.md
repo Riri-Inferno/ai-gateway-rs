@@ -78,7 +78,7 @@ ai-gateway-rs/
 | Method | Path | 用途 | 状態 |
 |---|---|---|:-:|
 | POST | `/v1/chat/completions` | 統一インターフェースで chat 推論（テキスト/画像入力対応） | ✅ |
-| GET  | `/v1/providers` | 利用可能プロバイダ一覧 | 未実装 |
+| GET  | `/v1/providers` | 利用可能プロバイダ一覧 | ✅ |
 | GET  | `/healthz` | liveness | ✅ |
 | GET  | `/readyz` | readiness | ✅ |
 | GET  | `/swagger-ui` | OpenAPI ドキュメント | ✅ |
@@ -143,5 +143,5 @@ docker compose up --build
 
 ## TODO
 
-- [ ] k3s manifest（Deployment / Service / Secret）
-- [ ] `/v1/providers` エンドポイント（利用可能プロバイダ一覧）
+<!-- 達成済みのため一旦空 -->
+
