@@ -19,6 +19,7 @@ presentation.workspace = true
 anyhow.workspace = true
 axum.workspace = true
 dotenvy.workspace = true
+gcp_auth.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true

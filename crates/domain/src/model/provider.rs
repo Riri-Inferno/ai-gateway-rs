@@ -8,7 +8,9 @@ use utoipa::ToSchema;
 pub enum ProviderId {
     GoogleAiStudio,
     Groq,
+    #[serde(rename = "openrouter")]
     OpenRouter,
+    Vertex,
 }
 
 impl ProviderId {
@@ -17,6 +19,7 @@ impl ProviderId {
             Self::GoogleAiStudio => "google_ai_studio",
             Self::Groq => "groq",
             Self::OpenRouter => "openrouter",
+            Self::Vertex => "vertex",
         }
     }
 }

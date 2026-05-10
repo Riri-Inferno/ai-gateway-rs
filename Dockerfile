@@ -38,7 +38,7 @@ COPY . .
 # ===================================
 # 実行ステージ（本番）
 # ===================================
-FROM gcr.io/distroless/cc-debian12:nonroot AS runtime
+FROM gcr.io/distroless/cc-debian13:nonroot AS runtime
 COPY --from=builder /bin/server /app/
 WORKDIR /app
 EXPOSE 8080

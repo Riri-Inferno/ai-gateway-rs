@@ -24,7 +24,7 @@ Rustで書かれた、AI APIを呼ぶだけの内部向け基盤（AI Gateway）
 - [x] Google AI Studio (Gemini API)
 - [x] Groq
 - [x] OpenRouter
-- [ ] (将来) Vertex AI など ADC 認証系
+- [x] Vertex AI (GCP / ADC認証)
 
 ## 技術スタック
 
@@ -135,7 +135,33 @@ docker compose up --build
 | `GOOGLE_AI_STUDIO_API_KEY` | Google AI Studio (Gemini) のキー |
 | `GROQ_API_KEY` | Groq のキー（後で） |
 | `OPENROUTER_API_KEY` | OpenRouter のキー（後で） |
+| `VERTEX_PROJECT_ID` | Vertex AI を有効化するGCPプロジェクトID。未設定ならVertexは登録されない |
+| `VERTEX_LOCATION` | Vertex AIのリージョン（既定: `us-central1`） |
+| `VERTEX_SA_JSON_PATH` | docker compose時のみ。ホスト側 Service Account 鍵JSONの絶対パス |
+| `GOOGLE_APPLICATION_CREDENTIALS` | （任意）ADC用のJSONパス。k3s運用ではWIF JSONをマウントしてここで指す |
 | `RUST_LOG` | ログレベル（例: `info,ai_gateway=debug`） |
+
+### Vertex AI の認証
+
+Vertex AI はAPIキー方式ではなく **ADC (Application Default Credentials)** を使う。実行環境ごとに資格情報の渡し方が違う。
+
+| 環境 | 資格情報 | 渡し方 |
+|---|---|---|
+| `cargo run -p server` | authorized_user JSON | `gcloud auth application-default login` 後、`gcp_auth` が `~/.config/gcloud/application_default_credentials.json` を自動検出 |
+| `docker compose up` | Service Account 鍵 JSON | ホストにSA鍵を保存し `.env` の `VERTEX_SA_JSON_PATH` で絶対パス指定。composeが `/var/secrets/sa.json` にマウント |
+| k3s 本番 | WIF JSON | `/etc/gcp/wif.json` にマウント + `GOOGLE_APPLICATION_CREDENTIALS` でパス指定。projected SA token と併用（home-raspi-iac 側で管理） |
+
+なぜ compose だけ Service Account 鍵かというと、`gcp_auth` の `ConfigDefaultCredentials` ローダ（authorized_user 用）は構築時にGoogle OAuth2エンドポイントへ即時アクセスする仕組みで、distroless ランタイムからは安定しないため。`CustomServiceAccount` ローダ（service_account 用）はファイル読込のみで完結するので確実に動く。
+
+`VERTEX_PROJECT_ID` が未設定ならゲートウェイ起動時にVertexはスキップされ、`/v1/providers` にも出ない。設定済みでADC解決に失敗した場合はwarnログを出して他プロバイダだけで起動する。
+
+#### docker compose で Vertex を有効化する手順
+
+1. GCPコンソール → IAM & Admin → Service Accounts でVertex AI 用のSAを作成（または既存を選択）
+2. そのSAに `roles/aiplatform.user` を付与
+3. SAのKeysタブから JSON 鍵をダウンロード、ホストの安全な場所に保存（例: `~/.config/gcp-keys/ai-gateway-vertex-dev.json`、mode 600）
+4. `.env` に `VERTEX_SA_JSON_PATH=/home/<user>/.config/gcp-keys/ai-gateway-vertex-dev.json` を追記
+5. `docker compose up -d --build` で再起動 → `/v1/providers` に `vertex` が出ればOK
 
 ## ドキュメント
 
