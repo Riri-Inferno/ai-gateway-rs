@@ -1,6 +1,14 @@
-//! Google AI Studio (Gemini) クライアント。
-//! `models/{model}:generateContent` を叩いてChat補完を行う。
-//! 別プロバイダ（Groq/OpenRouter等）を実装する際の **リファレンス** として使う。
+//! Vertex AI (GCP) クライアント。
+//! Gemini系モデルを `publishers/google/models/{model}:generateContent` で叩く。
+//!
+//! 認証は ADC (Application Default Credentials) 一本化:
+//!   - ローカル: `gcloud auth application-default login`
+//!   - k3s    : WIF JSON マウント + `GOOGLE_APPLICATION_CREDENTIALS` でパス指定
+//!
+//! ワイヤフォーマット自体は Google AI Studio (Gemini) と同形だが、
+//! エンドポイントとBearerトークン取得が異なる。
+
+use std::sync::Arc;
 
 use application::port::AiProvider;
 use async_trait::async_trait;
@@ -9,42 +17,70 @@ use domain::model::completion::{
 };
 use domain::model::provider::ProviderId;
 use domain::DomainError;
+use gcp_auth::TokenProvider;
 use serde::{Deserialize, Serialize};
 
-const ENDPOINT_BASE: &str = "https://generativelanguage.googleapis.com/v1beta/models";
+const SCOPE: &str = "https://www.googleapis.com/auth/cloud-platform";
 
-pub struct GoogleAiStudioClient {
-    api_key: String,
+pub struct VertexClient {
+    // `Arc<dyn TokenProvider>`: gcp_auth が返す「ADCのトークン発行者」。
+    // 内部でトークンキャッシュを持つので、毎回呼んでも実HTTPは期限切れ時のみ。
+    token_provider: Arc<dyn TokenProvider>,
+    project_id: String,
+    location: String,
     http: reqwest::Client,
 }
 
-impl GoogleAiStudioClient {
-    pub fn new(api_key: String) -> Self {
+impl VertexClient {
+    pub fn new(
+        token_provider: Arc<dyn TokenProvider>,
+        project_id: String,
+        location: String,
+    ) -> Self {
         Self {
-            api_key,
+            token_provider,
+            project_id,
+            location,
             http: reqwest::Client::new(),
         }
+    }
+
+    fn endpoint(&self, model: &str) -> String {
+        format!(
+            "https://{loc}-aiplatform.googleapis.com/v1/projects/{proj}/locations/{loc}/publishers/google/models/{model}:generateContent",
+            loc = self.location,
+            proj = self.project_id,
+            model = model,
+        )
+    }
+
+    async fn fetch_access_token(&self) -> Result<String, DomainError> {
+        let token = self
+            .token_provider
+            .token(&[SCOPE])
+            .await
+            .map_err(|e| DomainError::ProviderError(format!("vertex adc token failed: {e}")))?;
+        Ok(token.as_str().to_string())
     }
 }
 
 #[async_trait]
-impl AiProvider for GoogleAiStudioClient {
+impl AiProvider for VertexClient {
     fn id(&self) -> ProviderId {
-        ProviderId::GoogleAiStudio
+        ProviderId::Vertex
     }
 
     async fn chat_completion(
         &self,
         req: &ChatCompletionRequest,
     ) -> Result<ChatCompletionResponse, DomainError> {
-        // Gemini は roleが "user"/"model" の二択、systemは別フィールド `systemInstruction`
+        // Gemini は role が "user"/"model" のみ。system は別フィールド `systemInstruction`
         let mut system_parts: Vec<GeminiPart> = Vec::new();
         let mut contents: Vec<GeminiContent> = Vec::new();
 
         for msg in &req.messages {
             match msg.role {
                 Role::System => {
-                    // system は画像不可。テキストのみ抽出
                     system_parts.push(GeminiPart::text(msg.content.extract_text()));
                 }
                 Role::User => contents.push(GeminiContent {
@@ -57,7 +93,7 @@ impl AiProvider for GoogleAiStudioClient {
                 }),
                 Role::Tool => {
                     return Err(DomainError::InvalidRequest(
-                        "google_ai_studio: tool role is not supported yet".into(),
+                        "vertex: tool role is not supported yet".into(),
                     ));
                 }
             }
@@ -74,11 +110,13 @@ impl AiProvider for GoogleAiStudioClient {
             }),
         };
 
-        let url = format!("{ENDPOINT_BASE}/{}:generateContent", req.model);
+        let access_token = self.fetch_access_token().await?;
+        let url = self.endpoint(&req.model);
+
         let resp = self
             .http
             .post(&url)
-            .query(&[("key", &self.api_key)])
+            .bearer_auth(&access_token)
             .json(&body)
             .send()
             .await
@@ -88,7 +126,7 @@ impl AiProvider for GoogleAiStudioClient {
             let status = resp.status();
             let text = resp.text().await.unwrap_or_default();
             return Err(DomainError::ProviderError(format!(
-                "gemini status={status} body={text}"
+                "vertex status={status} body={text}"
             )));
         }
 
@@ -97,7 +135,6 @@ impl AiProvider for GoogleAiStudioClient {
             .await
             .map_err(|e| DomainError::ProviderError(format!("decode failed: {e}")))?;
 
-        // レスポンスの parts のうち最初の text を取り出す
         let content = parsed
             .candidates
             .into_iter()
@@ -106,7 +143,7 @@ impl AiProvider for GoogleAiStudioClient {
             .ok_or_else(|| DomainError::ProviderError("empty response".into()))?;
 
         Ok(ChatCompletionResponse {
-            provider: ProviderId::GoogleAiStudio,
+            provider: ProviderId::Vertex,
             model: req.model.clone(),
             content,
             usage: parsed.usage_metadata.map(|u| Usage {
@@ -135,22 +172,20 @@ fn domain_content_to_gemini_parts(c: &MessageContent) -> Result<Vec<GeminiPart>,
     }
 }
 
-/// `data:image/jpeg;base64,XXXXX` 形式の data URL を (mime_type, base64データ) に分解
-/// http(s) URL は Gemini が直接受け付けないので未サポートとしてエラー
+/// `data:image/jpeg;base64,XXXXX` 形式の data URL を (mime_type, base64データ) に分解。
+/// http(s) URL は Vertex (Gemini) が直接受け付けないので未サポートとしてエラー。
 fn parse_data_url(url: &str) -> Result<(String, String), DomainError> {
     let suffix = url.strip_prefix("data:").ok_or_else(|| {
-        DomainError::InvalidRequest(
-            "google_ai_studio: only data: URLs are supported for image input".into(),
-        )
+        DomainError::InvalidRequest("vertex: only data: URLs are supported for image input".into())
     })?;
 
-    let (header, data) = suffix.split_once(',').ok_or_else(|| {
-        DomainError::InvalidRequest("google_ai_studio: malformed data: URL".into())
-    })?;
+    let (header, data) = suffix
+        .split_once(',')
+        .ok_or_else(|| DomainError::InvalidRequest("vertex: malformed data: URL".into()))?;
 
     if !header.ends_with(";base64") {
         return Err(DomainError::InvalidRequest(
-            "google_ai_studio: only base64-encoded data: URLs are supported".into(),
+            "vertex: only base64-encoded data: URLs are supported".into(),
         ));
     }
 
@@ -159,6 +194,7 @@ fn parse_data_url(url: &str) -> Result<(String, String), DomainError> {
 }
 
 // ===== Gemini API のリクエスト/レスポンス型（このファイル内専用） =====
+// 形は Google AI Studio と同じ。違いはホストと認証ヘッダのみ。
 
 #[derive(Serialize)]
 struct GeminiRequest {
@@ -180,8 +216,8 @@ struct GeminiSystemInstruction {
     parts: Vec<GeminiPart>,
 }
 
-// Gemini の part は text または inlineData の片方を持つ。
-// 単一struct + Option二つで両用、不要なフィールドは serde で skip する設計。
+// part は text または inlineData の片方を持つ。
+// 単一struct + Option二つで両用、不要なフィールドは serde で skip する。
 #[derive(Serialize, Deserialize, Default)]
 struct GeminiPart {
     #[serde(default, skip_serializing_if = "Option::is_none")]

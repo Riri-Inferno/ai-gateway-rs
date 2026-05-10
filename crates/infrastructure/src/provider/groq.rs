@@ -4,7 +4,9 @@
 
 use application::port::AiProvider;
 use async_trait::async_trait;
-use domain::model::completion::{ChatCompletionRequest, ChatCompletionResponse, Role, Usage};
+use domain::model::completion::{
+    ChatCompletionRequest, ChatCompletionResponse, ContentPart, MessageContent, Role, Usage,
+};
 use domain::model::provider::ProviderId;
 use domain::DomainError;
 use serde::{Deserialize, Serialize};
@@ -35,32 +37,25 @@ impl AiProvider for GroqClient {
         &self,
         req: &ChatCompletionRequest,
     ) -> Result<ChatCompletionResponse, DomainError> {
-        // メッセージインスタンスを宣言
+        // メッセージを Groq の wire 型に詰め替える
         let mut messages: Vec<GroqMessage> = Vec::new();
-
-        // リクエストに含まれるるロールを元にメッセージを作る
         for msg in &req.messages {
-            match msg.role {
-                Role::System => messages.push(GroqMessage {
-                    role: "system".into(),
-                    content: msg.content.clone()
-                }),
-                Role::User => messages.push(GroqMessage {
-                    role: "user".into(),
-                    content: msg.content.clone(),
-                }),
-                Role::Assistant => messages.push(GroqMessage {
-                    role: "assistant".into(),
-                    content: msg.content.clone(),
-                }),
-                Role::Tool  => messages.push(GroqMessage {
-                    role: "tool".into(),
-                    content: msg.content.clone()
-                }),
-            }
+            // domain の MessageContent → Groq の content（string or array）に変換
+            // テキストのみなら文字列、画像混在なら配列で送る
+            // （古いモデルは配列形式を受け付けないため、なるべく単純な形で送る）
+            let content = domain_content_to_groq(&msg.content);
+            let role = match msg.role {
+                Role::System => "system",
+                Role::User => "user",
+                Role::Assistant => "assistant",
+                Role::Tool => "tool",
+            };
+            messages.push(GroqMessage {
+                role: role.into(),
+                content,
+            });
         }
 
-        // クライアントつくる
         let body = GroqRequest {
             model: req.model.clone(),
             messages,
@@ -68,7 +63,6 @@ impl AiProvider for GroqClient {
             max_tokens: req.max_tokens,
         };
 
-        // リクエストを飛ばす
         let resp = self
             .http
             .post(ENDPOINT)
@@ -78,7 +72,6 @@ impl AiProvider for GroqClient {
             .await
             .map_err(|e| DomainError::ProviderError(format!("request failed: {e}")))?;
 
-        // GroqAPI呼び出しが成功じゃないときはエラーを返して終了
         if !resp.status().is_success() {
             let status = resp.status();
             let text = resp.text().await.unwrap_or_default();
@@ -87,13 +80,11 @@ impl AiProvider for GroqClient {
             )));
         }
 
-        // APIからのレスポンスをデコード
         let parsed: GroqResponse = resp
             .json()
             .await
             .map_err(|e| DomainError::ProviderError(format!("decode failed: {e}")))?;
 
-        // パース済レスポンスからchoiceを所有権ごと取り出す
         let content = parsed
             .choices
             .into_iter()
@@ -101,8 +92,6 @@ impl AiProvider for GroqClient {
             .map(|c| c.message.content)
             .ok_or_else(|| DomainError::ProviderError("empty choices".into()))?;
 
-        // レスポンスを組み立てて返す
-        // Usageはないパラメータは無視
         Ok(ChatCompletionResponse {
             provider: ProviderId::Groq,
             model: req.model.clone(),
@@ -116,9 +105,29 @@ impl AiProvider for GroqClient {
     }
 }
 
+/// domain MessageContent → Groq wire content
+/// テキスト単体なら GroqContent::Text、partsなら GroqContent::Parts に詰め替える
+fn domain_content_to_groq(c: &MessageContent) -> GroqContent {
+    match c {
+        MessageContent::Text(s) => GroqContent::Text(s.clone()),
+        MessageContent::Parts(parts) => GroqContent::Parts(
+            parts
+                .iter()
+                .map(|p| match p {
+                    ContentPart::Text { text } => GroqContentPart::Text { text: text.clone() },
+                    ContentPart::ImageUrl { image_url } => GroqContentPart::ImageUrl {
+                        image_url: GroqImageUrl {
+                            url: image_url.url.clone(),
+                            detail: image_url.detail.clone(),
+                        },
+                    },
+                })
+                .collect(),
+        ),
+    }
+}
+
 // ===== Groq API の wire型（OpenAI互換） =====
-// roleは小文字 ("system" | "user" | "assistant")。
-// snake_case フィールド名 (max_tokens / prompt_tokens 等) はそのまま使われる。
 
 #[derive(Serialize)]
 struct GroqRequest {
@@ -133,7 +142,30 @@ struct GroqRequest {
 #[derive(Serialize)]
 struct GroqMessage {
     role: String,
-    content: String,
+    content: GroqContent,
+}
+
+// `#[serde(untagged)]`: シリアライズ時にどっちのvariantかでJSON形が変わる。
+// Text ならただの文字列、Parts なら配列。OpenAI互換APIの仕様。
+#[derive(Serialize)]
+#[serde(untagged)]
+enum GroqContent {
+    Text(String),
+    Parts(Vec<GroqContentPart>),
+}
+
+#[derive(Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum GroqContentPart {
+    Text { text: String },
+    ImageUrl { image_url: GroqImageUrl },
+}
+
+#[derive(Serialize)]
+struct GroqImageUrl {
+    url: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    detail: Option<String>,
 }
 
 #[derive(Deserialize)]
