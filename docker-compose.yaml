@@ -17,6 +17,13 @@ services:
       - "8080:8080"
     environment:
       - RUST_LOG=debug
+      # 下のvolumesでマウントしたSA鍵を gcp_auth に教える
+      - GOOGLE_APPLICATION_CREDENTIALS=/var/secrets/sa.json
+    volumes:
+      # Vertex AI用 Service Account 鍵 (service_account 型 JSON) をホストから渡す。
+      # `.env` に VERTEX_SA_JSON_PATH=/path/to/sa.json を書いておく。
+      # 未設定なら `/dev/null` をマウント → gcp_auth がパース失敗 → サーバはVertex無しで起動。
+      - ${VERTEX_SA_JSON_PATH:-/dev/null}:/var/secrets/sa.json:ro
     restart: unless-stopped
 
   # --- テスト実行用サービス ---
